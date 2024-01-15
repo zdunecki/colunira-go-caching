@@ -1,7 +1,5 @@
 package database
 
-import "fmt"
-
 type DatabaseInterface interface {
 	GetById(id string) (interface{}, error)
 	SetById(id string, data interface{}) error
@@ -12,7 +10,6 @@ type Database struct {
 }
 
 func (d *Database) GetById(id string) (interface{}, error) {
-	fmt.Printf("Database access for %s\n", id)
 	return d.Data[id], nil
 }
 

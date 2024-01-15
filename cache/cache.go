@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -31,11 +30,10 @@ func New(
 
 func (c *cache) Set(id string, data interface{}) {
 	c.items[id] = cachedData{
-		data:      "dupa",
+		data:      data,
 		expiresAt: time.Now().Add(c.expiresAfter),
 	}
 	
-	fmt.Printf("Set: %v\n", c.items)
 }
 
 func (c *cache) Get(id string) (interface{}, bool) {

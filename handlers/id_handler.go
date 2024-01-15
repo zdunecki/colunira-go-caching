@@ -9,7 +9,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-
+// TODO: Better way to make this "global"?
 var Database database.Database
 var Cache cache.CacheInterface
 
