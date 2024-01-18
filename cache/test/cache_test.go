@@ -2,6 +2,7 @@ package cache_test
 
 import (
 	"gosession/caching/cache"
+	"gosession/caching/cache/test/mocks"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,7 @@ func TestSingleAccessCaching(t *testing.T) {
 
 	id := "test-id"
 	data := "example data"
-	d := MockDatabase{
+	d := mocks.Database{
 		Data: map[string]interface{}{
 			id: data,
 		},
@@ -62,7 +63,7 @@ func TestMultiAccessCaching(t *testing.T) {
 
 	id := "test-id"
 	expectedData := "example data"
-	d := MockDatabase{
+	d := mocks.Database{
 		Data: map[string]interface{}{
 			id: expectedData,
 		},
@@ -108,7 +109,7 @@ func TestMultiAccessCaching(t *testing.T) {
 		}
 	}
 
-	t.Run("should always get valid data from cache and database", func(t* testing.T) {
+	t.Run("should always get valid data from cache and database", func(t *testing.T) {
 		if !validResult {
 			t.Fatalf("Data from cache is not valid")
 		}
@@ -126,7 +127,7 @@ func TestMultiAccessCachingExpiration(t *testing.T) {
 
 	id := "test-id"
 	expectedData := "example data"
-	d := MockDatabase{
+	d := mocks.Database{
 		Data: map[string]interface{}{
 			id: expectedData,
 		},
@@ -171,13 +172,13 @@ func TestMultiAccessCachingExpiration(t *testing.T) {
 	for _, result := range results {
 		if !result.cached {
 			notCachedCount++
-		}		
+		}
 		if result.data != expectedData {
 			validResult = false
 		}
 	}
 
-	t.Run("should always get valid data from cache and database", func(t* testing.T) {
+	t.Run("should always get valid data from cache and database", func(t *testing.T) {
 		if !validResult {
 			t.Fatalf("Data from cache is not valid")
 		}
