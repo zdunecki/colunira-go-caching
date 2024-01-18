@@ -1,8 +1,7 @@
-package main
+package cache_test
 
 import (
 	"gosession/caching/cache"
-	"gosession/caching/database"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +12,7 @@ func TestSingleAccessCaching(t *testing.T) {
 
 	id := "test-id"
 	data := "example data"
-	d := database.Database{
+	d := MockDatabase{
 		Data: map[string]interface{}{
 			id: data,
 		},
@@ -54,7 +53,7 @@ func TestSingleAccessCaching(t *testing.T) {
 }
 
 type Result struct {
-	data  interface{}
+	data   interface{}
 	cached bool
 }
 
@@ -63,10 +62,11 @@ func TestMultiAccessCaching(t *testing.T) {
 
 	id := "test-id"
 	data := "example data"
-	d := database.Database{
+	d := MockDatabase{
 		Data: map[string]interface{}{
 			id: data,
 		},
+		OperationTime: 500 * time.Millisecond,
 	}
 	expiresAfter, _ := time.ParseDuration("15s")
 	c := cache.New(expiresAfter)
@@ -97,6 +97,64 @@ func TestMultiAccessCaching(t *testing.T) {
 		results[i] = <-channel
 	}
 
+	notCachedCount := 0
+	for _, result := range results {
+		if !result.cached {
+			notCachedCount++
+		}
+	}
+
+	t.Run("should cache data after one request to database", func(t *testing.T) {
+		if notCachedCount != 1 {
+			t.Fatalf("Data in cache should be unavailable only once, actual: %v", notCachedCount)
+		}
+	})
+
+}
+
+func TestMultiAccessCachingExpiration(t *testing.T) {
+	/// Given
+
+	id := "test-id"
+	data := "example data"
+	d := MockDatabase{
+		Data: map[string]interface{}{
+			id: data,
+		},
+		OperationTime: 500 * time.Millisecond,
+	}
+	expiresAfter, _ := time.ParseDuration("1s")
+	c := cache.New(expiresAfter)
+
+	numWorkers := 100
+
+	channel := make(chan Result, numWorkers)
+	results := make([]Result, numWorkers)
+
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	/// When
+
+	for i := range results {
+		go func(i int) {
+			if i == numWorkers/2 {
+				time.Sleep(2 * time.Second)
+			}
+			result, found := c.Get(id, d.GetById)
+
+			channel <- Result{result, found}
+
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i := range results {
+		results[i] = <-channel
+	}
+
 	// Then
 
 	notCachedCount := 0
@@ -106,9 +164,9 @@ func TestMultiAccessCaching(t *testing.T) {
 		}
 	}
 
-	t.Run("should cache data after one request to database", func(t* testing.T) {
-		if notCachedCount != 1 {
-			t.Fatalf("Data in cache should be unavailable only once, actual: %v", notCachedCount)
+	t.Run("should cache data after one request to database and refresh cache after it expires", func(t *testing.T) {
+		if notCachedCount < 2 {
+			t.Fatalf("Data in cache should be unavailable at least twice, actual: %v", notCachedCount)
 		}
 	})
 

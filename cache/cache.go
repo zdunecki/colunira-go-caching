@@ -71,7 +71,9 @@ func (c *cache) Get(id string, databaseRequest DatabaseRequest) (interface{}, bo
 // TODO: Periodically delete pending data
 
 func (c *cache) deleteExpiredData(id string) {
+	c.mu.Lock()
 	delete(c.items, id)
+	c.mu.Unlock()
 	// for key, data := range c.items {
 	// 	if data.isExpired() {
 	// 		delete(c.items, key)
