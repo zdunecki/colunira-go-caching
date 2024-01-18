@@ -1,4 +1,4 @@
-package integration_test
+package cache_test
 
 import (
 	"gosession/caching/cache"
@@ -61,14 +61,14 @@ func TestMultiAccessCaching(t *testing.T) {
 	/// Given
 
 	id := "test-id"
-	data := "example data"
+	expectedData := "example data"
 	d := MockDatabase{
 		Data: map[string]interface{}{
-			id: data,
+			id: expectedData,
 		},
 		OperationTime: 500 * time.Millisecond,
 	}
-	expiresAfter, _ := time.ParseDuration("15s")
+	expiresAfter := 15 * time.Second
 	c := cache.New(expiresAfter)
 
 	numWorkers := 100
@@ -83,9 +83,9 @@ func TestMultiAccessCaching(t *testing.T) {
 
 	for range results {
 		go func() {
-			result, found := c.Get(id, d.GetById)
+			result, cached := c.Get(id, d.GetById)
 
-			channel <- Result{result, found}
+			channel <- Result{result, cached}
 
 			wg.Done()
 		}()
@@ -98,12 +98,21 @@ func TestMultiAccessCaching(t *testing.T) {
 	}
 
 	notCachedCount := 0
+	validResult := true
 	for _, result := range results {
 		if !result.cached {
 			notCachedCount++
 		}
+		if result.data != expectedData {
+			validResult = false
+		}
 	}
 
+	t.Run("should always get valid data from cache and database", func(t* testing.T) {
+		if !validResult {
+			t.Fatalf("Data from cache is not valid")
+		}
+	})
 	t.Run("should cache data after one request to database", func(t *testing.T) {
 		if notCachedCount != 1 {
 			t.Fatalf("Data in cache should be unavailable only once, actual: %v", notCachedCount)
@@ -116,14 +125,14 @@ func TestMultiAccessCachingExpiration(t *testing.T) {
 	/// Given
 
 	id := "test-id"
-	data := "example data"
+	expectedData := "example data"
 	d := MockDatabase{
 		Data: map[string]interface{}{
-			id: data,
+			id: expectedData,
 		},
 		OperationTime: 500 * time.Millisecond,
 	}
-	expiresAfter, _ := time.ParseDuration("1s")
+	expiresAfter := time.Second
 	c := cache.New(expiresAfter)
 
 	numWorkers := 100
@@ -137,10 +146,10 @@ func TestMultiAccessCachingExpiration(t *testing.T) {
 	/// When
 
 	for i := range results {
+		if i == numWorkers/2 {
+			time.Sleep(2 * time.Second)
+		}
 		go func(i int) {
-			if i == numWorkers/2 {
-				time.Sleep(2 * time.Second)
-			}
 			result, found := c.Get(id, d.GetById)
 
 			channel <- Result{result, found}
@@ -158,11 +167,21 @@ func TestMultiAccessCachingExpiration(t *testing.T) {
 	// Then
 
 	notCachedCount := 0
+	validResult := true
 	for _, result := range results {
 		if !result.cached {
 			notCachedCount++
+		}		
+		if result.data != expectedData {
+			validResult = false
 		}
 	}
+
+	t.Run("should always get valid data from cache and database", func(t* testing.T) {
+		if !validResult {
+			t.Fatalf("Data from cache is not valid")
+		}
+	})
 
 	t.Run("should cache data after one request to database and refresh cache after it expires", func(t *testing.T) {
 		if notCachedCount < 2 {
