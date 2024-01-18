@@ -5,14 +5,14 @@ import (
 	"time"
 )
 
-// Possibly DatabaseRequest should be part of the cache struct instead of the Get function
+// Possibly [DataRequest] should be part of the [cache] struct instead of the [Get] function
 // This would cause less repetition, but would mean every database request would have a separate cache instance
-// It depends on the requirements but wouldnt require big changes so I leave it this way for now
-type DatabaseRequest func(string) interface{}
+// It depends on the requirements but wouldn't require big changes so I leave it this way for now
+type DataRequest func(string) interface{}
 
 type Cache interface {
 	Set(string, interface{})
-	Get(string, DatabaseRequest) (data interface{}, cached bool)
+	Get(string, DataRequest) (data interface{}, cached bool)
 }
 
 type cachedData struct {
@@ -46,7 +46,7 @@ func (c *cache) Set(id string, data interface{}) {
 	c.mu.Unlock()
 }
 
-func (c *cache) Get(id string, databaseRequest DatabaseRequest) (interface{}, bool) {
+func (c *cache) Get(id string, databaseRequest DataRequest) (interface{}, bool) {
 	c.mu.Lock()
 
 	item, found := c.items[id]

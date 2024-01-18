@@ -17,14 +17,14 @@ func TestSingleAccessCaching(t *testing.T) {
 			id: data,
 		},
 	}
-	expiresAfter, _ := time.ParseDuration("5s")
+	expiresAfter := time.Second
 	c := cache.New(expiresAfter)
 
 	/// When
 
 	_, cached := c.Get(id, d.GetById)
 
-	t.Run("should not find data in cache before it was cached", func(t *testing.T) {
+	t.Run("should not find data in cache on first access", func(t *testing.T) {
 		if cached {
 			t.Fatal("Data should not be available in cache before using c.Set")
 		}
