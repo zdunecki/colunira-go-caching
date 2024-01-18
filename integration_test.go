@@ -3,14 +3,14 @@ package main
 import (
 	"gosession/caching/cache"
 	"gosession/caching/database"
+	"sync"
 	"testing"
 	"time"
 )
 
-// TestHelloName calls greetings.Hello with a name, checking
-// for a valid return value.
 func TestSingleAccessCaching(t *testing.T) {
-	/// Setup
+	/// Given
+
 	id := "test-id"
 	data := "example data"
 	d := database.Database{
@@ -18,57 +18,49 @@ func TestSingleAccessCaching(t *testing.T) {
 			id: data,
 		},
 	}
-	expires, _ := time.ParseDuration("5s")
-	c := cache.New(expires)
+	expiresAfter, _ := time.ParseDuration("5s")
+	c := cache.New(expiresAfter)
 
-	/// Test
+	/// When
 
-	// First Get should not find a value
-	_, notCachedFound := c.Get(id)
-	if notCachedFound {
-		t.Fatal("Data should not be available in cache before using c.Set")
-	}
+	_, cached := c.Get(id, d.GetById)
 
-	expectedResult, _ := d.GetById(id)
-	c.Set(id, expectedResult)
+	t.Run("should not find data in cache before it was cached", func(t *testing.T) {
+		if cached {
+			t.Fatal("Data should not be available in cache before using c.Set")
+		}
+	})
 
-	// Next Get should find a value until expired
-	cachedResult, cachedFound := c.Get(id)
-	if !cachedFound {
-		t.Fatal("Data should be available in cache after using c.Set")
-	}
+	expectedResult := d.GetById(id)
+	cachedResult, cached := c.Get(id, d.GetById)
 
-	// Cached and database result should be the same
-	if expectedResult != cachedResult {
-		t.Fatalf("Cached and database result should be the same. Expected: %v, got: %v", expectedResult, cachedResult)
-	}
+	t.Run("should find expected data in cache after it was cached", func(t *testing.T) {
+		if !cached {
+			t.Fatal("Data should be available in cache after using c.Set")
+		}
+		if expectedResult != cachedResult {
+			t.Fatalf("Cached and database result should be the same. Expected: %v, got: %v", expectedResult, cachedResult)
+		}
+	})
 
-	time.Sleep(expires)
-	_, expiredFound := c.Get(id)
-	// After expiration time the value should be expired and therefore not found in the cache
-	if expiredFound {
-		t.Fatalf("Data should not be available in the cache after expiration time passed")
-	}
+	time.Sleep(expiresAfter)
+	_, expiredFound := c.Get(id, d.GetById)
+
+	t.Run("should not find data in cache after it expired", func(t *testing.T) {
+		if expiredFound {
+			t.Fatalf("Data should not be available in the cache after expiration time passed")
+		}
+	})
 }
 
 type Result struct {
-	data interface{}
-	found bool
-}
-
-func getWithCaching(ch chan Result, c cache.CacheInterface, d database.Database, id string) {
-	result, found := c.Get(id)
-
-	if !found {
-		result, _ = d.GetById(id)
-		c.Set(id, result)
-	}
-
-	ch <- Result{result, found}
+	data  interface{}
+	cached bool
 }
 
 func TestMultiAccessCaching(t *testing.T) {
-	/// Setup
+	/// Given
+
 	id := "test-id"
 	data := "example data"
 	d := database.Database{
@@ -76,31 +68,48 @@ func TestMultiAccessCaching(t *testing.T) {
 			id: data,
 		},
 	}
-	expires, _ := time.ParseDuration("5s")
-	c := cache.New(expires)
+	expiresAfter, _ := time.ParseDuration("15s")
+	c := cache.New(expiresAfter)
 
-	/// Test
+	numWorkers := 100
 
-	channels := make([]chan Result, 10)
-	results := make([]Result, 10)
+	channel := make(chan Result, numWorkers)
+	results := make([]Result, numWorkers)
 
-	for i := range channels {
-		channels[i] = make(chan Result)
-		go getWithCaching(channels[i], c, d, id)
+	var wg sync.WaitGroup
+	wg.Add(numWorkers)
+
+	/// When
+
+	for range results {
+		go func() {
+			result, found := c.Get(id, d.GetById)
+
+			channel <- Result{result, found}
+
+			wg.Done()
+		}()
 	}
+
+	wg.Wait()
 
 	for i := range results {
-		results[i] = <- channels[i]
+		results[i] = <-channel
 	}
 
-	notFoundCount := 0
+	// Then
+
+	notCachedCount := 0
 	for _, result := range results {
-		if !result.found {
-			notFoundCount++
+		if !result.cached {
+			notCachedCount++
 		}
 	}
 
-	if notFoundCount != 1 {
-		t.Fatalf("Data in cache should be unavailable only once, actual: %v", notFoundCount)
-	}
+	t.Run("should cache data after one request to database", func(t* testing.T) {
+		if notCachedCount != 1 {
+			t.Fatalf("Data in cache should be unavailable only once, actual: %v", notCachedCount)
+		}
+	})
+
 }

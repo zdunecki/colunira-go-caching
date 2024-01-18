@@ -11,18 +11,14 @@ import (
 
 // TODO: Better way to make this "global"?
 var Database database.Database
-var Cache cache.CacheInterface
+var Cache cache.Cache
 
 func IdHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	w.WriteHeader(http.StatusOK)
 	id := vars["id"]
 
-	res, found := Cache.Get(id)
-	if !found {
-		res, _ = Database.GetById(id)
-		Cache.Set(id, res)
-	}
-	
+	res, _ := Cache.Get(id, Database.GetById)
+
 	fmt.Fprintf(w, "Response: %s", res)
 }

@@ -1,12 +1,18 @@
 package cache
 
 import (
+	"sync"
 	"time"
 )
 
-type CacheInterface interface {
+// Possibly DatabaseRequest should be part of the cache struct instead of the Get function
+// This would cause less repetition, but would mean every database request would have a separate cache instance
+// It depends on the requirements but wouldnt require big changes so I leave it this way for now
+type DatabaseRequest func(string) interface{}
+
+type Cache interface {
 	Set(string, interface{})
-	Get(string) (data interface{}, found bool)
+	Get(string, DatabaseRequest) (data interface{}, cached bool)
 }
 
 type cachedData struct {
@@ -17,11 +23,12 @@ type cachedData struct {
 type cache struct {
 	expiresAfter time.Duration
 	items        map[string]cachedData
+	mu           sync.Mutex
 }
 
 func New(
 	expiresAfter time.Duration,
-) CacheInterface {
+) Cache {
 	return &cache{
 		expiresAfter: expiresAfter,
 		items:        map[string]cachedData{},
@@ -29,18 +36,29 @@ func New(
 }
 
 func (c *cache) Set(id string, data interface{}) {
+	c.mu.Lock()
+
 	c.items[id] = cachedData{
 		data:      data,
 		expiresAt: time.Now().Add(c.expiresAfter),
 	}
-	
+
+	c.mu.Unlock()
 }
 
-func (c *cache) Get(id string) (interface{}, bool) {
+func (c *cache) Get(id string, databaseRequest DatabaseRequest) (interface{}, bool) {
+	c.mu.Lock()
+
 	item, found := c.items[id]
+
 	if !found {
-		return nil, false
+		data := databaseRequest(id)
+		c.mu.Unlock()
+		c.Set(id, data)
+		return data, false
 	}
+
+	c.mu.Unlock()
 
 	if item.isExpired() {
 		c.deleteExpiredData(id)
