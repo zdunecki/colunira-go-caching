@@ -1,4 +1,4 @@
-package cache_test
+package integration_test
 
 import (
 	"time"

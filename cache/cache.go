@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+const (
+	NeverExpires time.Duration = -1
+)
+
 // Possibly [DataRequest] should be part of the [cache] struct instead of the [Get] function
 // This would cause less repetition, but would mean every database request would have a separate cache instance
 // It depends on the requirements but wouldn't require big changes so I leave it this way for now
@@ -13,6 +17,8 @@ type DataRequest func(string) interface{}
 type Cache interface {
 	Set(string, interface{})
 	Get(string, DataRequest) (data interface{}, cached bool)
+	DeleteExpired()
+	Clear()
 }
 
 type cachedData struct {
@@ -38,9 +44,16 @@ func New(
 func (c *cache) Set(id string, data interface{}) {
 	c.mu.Lock()
 
+	var expiresAt time.Time
+	if c.expiresAfter == NeverExpires {
+		expiresAt = time.Now().AddDate(99, 0, 0)
+	} else {
+		expiresAt = time.Now().Add(c.expiresAfter)
+	}
+
 	c.items[id] = cachedData{
 		data:      data,
-		expiresAt: time.Now().Add(c.expiresAfter),
+		expiresAt: expiresAt,
 	}
 
 	c.mu.Unlock()
@@ -60,27 +73,33 @@ func (c *cache) Get(id string, databaseRequest DataRequest) (interface{}, bool) 
 
 	c.mu.Unlock()
 
-	if item.isExpired() {
-		c.deleteExpiredData(id)
+	if item.expired() {
+		c.delete(id)
 		return nil, false
 	}
 
 	return item.data, true
 }
 
-// TODO: Periodically delete pending data
+func (c *cache) DeleteExpired() {
+	for key, data := range c.items {
+		if data.expired() {
+			delete(c.items, key)
+		}
+	}
+}
 
-func (c *cache) deleteExpiredData(id string) {
+func (c *cache) Clear() {
+	c.items = make(map[string]cachedData)
+}
+
+func (c *cache) delete(id string) {
 	c.mu.Lock()
 	delete(c.items, id)
 	c.mu.Unlock()
-	// for key, data := range c.items {
-	// 	if data.isExpired() {
-	// 		delete(c.items, key)
-	// 	}
-	// }
+
 }
 
-func (d cachedData) isExpired() bool {
+func (d cachedData) expired() bool {
 	return d.expiresAt.Before(time.Now())
 }
